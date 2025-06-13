@@ -1,57 +1,82 @@
-import React, { useState } from 'react'
-import { Calculator } from './components/Calculator'
-import { TodoList } from './components/TodoList'
-import { WeatherWidget } from './components/WeatherWidget'
+import React from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { FinanceProvider } from './contexts/FinanceContext'
+import { Login } from './components/auth/Login'
+import { Register } from './components/auth/Register'
+import { Dashboard } from './components/dashboard/Dashboard'
+import { Expenses } from './components/expenses/Expenses'
+import { Budget } from './components/budget/Budget'
+import { Analytics } from './components/analytics/Analytics'
+import { Layout } from './components/layout/Layout'
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  return user ? <>{children}</> : <Navigate to="/login" />
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  return !user ? <>{children}</> : <Navigate to="/dashboard" />
+}
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'calculator' | 'todo' | 'weather'>('calculator')
-
-  const tabs = [
-    { id: 'calculator' as const, label: 'Calculator', icon: '🧮' },
-    { id: 'todo' as const, label: 'Todo List', icon: '📝' },
-    { id: 'weather' as const, label: 'Weather', icon: '🌤️' },
-  ]
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="container mx-auto px-4 py-8">
-        <header className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
-            Bolt Test Repository
-          </h1>
-          <p className="text-gray-600">A collection of interactive components</p>
-        </header>
-
-        <div className="max-w-4xl mx-auto">
-          {/* Tab Navigation */}
-          <div className="flex justify-center mb-8">
-            <div className="bg-white rounded-lg p-1 shadow-lg">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-6 py-3 rounded-md font-medium transition-all duration-200 ${
-                    activeTab === tab.id
-                      ? 'bg-blue-500 text-white shadow-md'
-                      : 'text-gray-600 hover:text-blue-500 hover:bg-blue-50'
-                  }`}
-                >
-                  <span className="mr-2">{tab.icon}</span>
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+    <AuthProvider>
+      <FinanceProvider>
+        <Router>
+          <div className="min-h-screen bg-gray-50">
+            <Routes>
+              <Route path="/login" element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              } />
+              <Route path="/register" element={
+                <PublicRoute>
+                  <Register />
+                </PublicRoute>
+              } />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Dashboard />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/dashboard" element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Dashboard />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/expenses" element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Expenses />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/budget" element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Budget />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+              <Route path="/analytics" element={
+                <ProtectedRoute>
+                  <Layout>
+                    <Analytics />
+                  </Layout>
+                </ProtectedRoute>
+              } />
+            </Routes>
           </div>
-
-          {/* Tab Content */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            {activeTab === 'calculator' && <Calculator />}
-            {activeTab === 'todo' && <TodoList />}
-            {activeTab === 'weather' && <WeatherWidget />}
-          </div>
-        </div>
-      </div>
-    </div>
+        </Router>
+      </FinanceProvider>
+    </AuthProvider>
   )
 }
 
