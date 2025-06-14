@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from './AuthContext'
 
 export interface Transaction {
   id: string
@@ -7,6 +9,8 @@ export interface Transaction {
   category: string
   date: string
   type: 'income' | 'expense'
+  created_at?: string
+  updated_at?: string
 }
 
 export interface BudgetItem {
@@ -14,15 +18,33 @@ export interface BudgetItem {
   category: string
   budgeted: number
   spent: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface Statement {
+  id: string
+  filename: string
+  file_path: string
+  file_type: 'bank' | 'credit_card'
+  upload_date: string
+  processed: boolean
+  transactions_extracted: number
+  created_at: string
 }
 
 interface FinanceContextType {
   transactions: Transaction[]
   budgets: BudgetItem[]
-  addTransaction: (transaction: Omit<Transaction, 'id'>) => void
-  deleteTransaction: (id: string) => void
-  updateBudget: (category: string, amount: number) => void
+  statements: Statement[]
+  addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>
+  deleteTransaction: (id: string) => Promise<void>
+  updateBudget: (category: string, amount: number) => Promise<void>
+  uploadStatement: (file: File, type: 'bank' | 'credit_card') => Promise<void>
+  deleteStatement: (id: string) => Promise<void>
   categories: string[]
+  loading: boolean
+  refreshData: () => Promise<void>
 }
 
 const FinanceContext = createContext<FinanceContextType | undefined>(undefined)
@@ -51,115 +73,285 @@ const defaultCategories = [
 ]
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [budgets, setBudgets] = useState<BudgetItem[]>([])
+  const [statements, setStatements] = useState<Statement[]>([])
+  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    // Load data from localStorage
-    const storedTransactions = localStorage.getItem('transactions')
-    const storedBudgets = localStorage.getItem('budgets')
-    
-    if (storedTransactions) {
-      setTransactions(JSON.parse(storedTransactions))
-    } else {
-      // Add some sample data
-      const sampleTransactions: Transaction[] = [
-        {
-          id: '1',
-          amount: 3500,
-          description: 'Monthly Salary',
-          category: 'Salary',
-          date: new Date().toISOString().split('T')[0],
-          type: 'income'
-        },
-        {
-          id: '2',
-          amount: 45.50,
-          description: 'Grocery Shopping',
-          category: 'Food & Dining',
-          date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-          type: 'expense'
-        },
-        {
-          id: '3',
-          amount: 12.99,
-          description: 'Netflix Subscription',
-          category: 'Entertainment',
-          date: new Date(Date.now() - 172800000).toISOString().split('T')[0],
-          type: 'expense'
-        }
-      ]
-      setTransactions(sampleTransactions)
-    }
+  const refreshData = async () => {
+    if (!user) return
 
-    if (storedBudgets) {
-      setBudgets(JSON.parse(storedBudgets))
-    } else {
-      // Initialize default budgets
-      const defaultBudgets: BudgetItem[] = defaultCategories
-        .filter(cat => cat !== 'Salary' && cat !== 'Freelance' && cat !== 'Investment')
-        .map(category => ({
-          id: category,
+    setLoading(true)
+    try {
+      // Fetch transactions
+      const { data: transactionsData, error: transactionsError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+
+      if (transactionsError) throw transactionsError
+      setTransactions(transactionsData || [])
+
+      // Fetch budgets
+      const { data: budgetsData, error: budgetsError } = await supabase
+        .from('budgets')
+        .select('*')
+        .eq('user_id', user.id)
+
+      if (budgetsError) throw budgetsError
+      
+      // Initialize budgets for all categories if they don't exist
+      const existingBudgets = budgetsData || []
+      const missingCategories = defaultCategories.filter(
+        cat => !existingBudgets.some(budget => budget.category === cat)
+      )
+
+      if (missingCategories.length > 0) {
+        const newBudgets = missingCategories.map(category => ({
+          user_id: user.id,
           category,
           budgeted: 0,
           spent: 0
         }))
-      setBudgets(defaultBudgets)
-    }
-  }, [])
 
-  useEffect(() => {
-    localStorage.setItem('transactions', JSON.stringify(transactions))
-  }, [transactions])
+        const { data: insertedBudgets, error: insertError } = await supabase
+          .from('budgets')
+          .insert(newBudgets)
+          .select()
 
-  useEffect(() => {
-    localStorage.setItem('budgets', JSON.stringify(budgets))
-  }, [budgets])
+        if (!insertError && insertedBudgets) {
+          setBudgets([...existingBudgets, ...insertedBudgets])
+        } else {
+          setBudgets(existingBudgets)
+        }
+      } else {
+        setBudgets(existingBudgets)
+      }
 
-  const addTransaction = (transaction: Omit<Transaction, 'id'>) => {
-    const newTransaction = {
-      ...transaction,
-      id: Date.now().toString()
-    }
-    setTransactions(prev => [newTransaction, ...prev])
+      // Fetch statements
+      const { data: statementsData, error: statementsError } = await supabase
+        .from('statements')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('upload_date', { ascending: false })
 
-    // Update budget spent amount if it's an expense
-    if (transaction.type === 'expense') {
-      setBudgets(prev => prev.map(budget => 
-        budget.category === transaction.category
-          ? { ...budget, spent: budget.spent + transaction.amount }
-          : budget
-      ))
+      if (statementsError) throw statementsError
+      setStatements(statementsData || [])
+
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const deleteTransaction = (id: string) => {
-    const transaction = transactions.find(t => t.id === id)
-    if (transaction && transaction.type === 'expense') {
-      setBudgets(prev => prev.map(budget => 
-        budget.category === transaction.category
-          ? { ...budget, spent: Math.max(0, budget.spent - transaction.amount) }
-          : budget
-      ))
+  useEffect(() => {
+    if (user) {
+      refreshData()
+    } else {
+      setTransactions([])
+      setBudgets([])
+      setStatements([])
     }
-    setTransactions(prev => prev.filter(t => t.id !== id))
+  }, [user])
+
+  const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
+    if (!user) return
+
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert({
+          ...transaction,
+          user_id: user.id
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setTransactions(prev => [data, ...prev])
+
+      // Update budget spent amount if it's an expense
+      if (transaction.type === 'expense') {
+        await updateBudgetSpent(transaction.category, transaction.amount, 'add')
+      }
+    } catch (error) {
+      console.error('Error adding transaction:', error)
+      throw error
+    }
   }
 
-  const updateBudget = (category: string, amount: number) => {
-    setBudgets(prev => prev.map(budget => 
-      budget.category === category
-        ? { ...budget, budgeted: amount }
-        : budget
-    ))
+  const deleteTransaction = async (id: string) => {
+    if (!user) return
+
+    try {
+      const transaction = transactions.find(t => t.id === id)
+      
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      setTransactions(prev => prev.filter(t => t.id !== id))
+
+      // Update budget spent amount if it was an expense
+      if (transaction && transaction.type === 'expense') {
+        await updateBudgetSpent(transaction.category, transaction.amount, 'subtract')
+      }
+    } catch (error) {
+      console.error('Error deleting transaction:', error)
+      throw error
+    }
+  }
+
+  const updateBudgetSpent = async (category: string, amount: number, operation: 'add' | 'subtract') => {
+    if (!user) return
+
+    try {
+      const currentBudget = budgets.find(b => b.category === category)
+      if (!currentBudget) return
+
+      const newSpent = operation === 'add' 
+        ? currentBudget.spent + amount 
+        : Math.max(0, currentBudget.spent - amount)
+
+      const { data, error } = await supabase
+        .from('budgets')
+        .update({ spent: newSpent })
+        .eq('id', currentBudget.id)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setBudgets(prev => prev.map(budget => 
+        budget.id === currentBudget.id ? data : budget
+      ))
+    } catch (error) {
+      console.error('Error updating budget spent:', error)
+    }
+  }
+
+  const updateBudget = async (category: string, amount: number) => {
+    if (!user) return
+
+    try {
+      const { data, error } = await supabase
+        .from('budgets')
+        .upsert({
+          user_id: user.id,
+          category,
+          budgeted: amount
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setBudgets(prev => {
+        const existingIndex = prev.findIndex(b => b.category === category)
+        if (existingIndex >= 0) {
+          const updated = [...prev]
+          updated[existingIndex] = data
+          return updated
+        } else {
+          return [...prev, data]
+        }
+      })
+    } catch (error) {
+      console.error('Error updating budget:', error)
+      throw error
+    }
+  }
+
+  const uploadStatement = async (file: File, type: 'bank' | 'credit_card') => {
+    if (!user) return
+
+    try {
+      // Upload file to Supabase Storage
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('statements')
+        .upload(fileName, file)
+
+      if (uploadError) throw uploadError
+
+      // Save statement record to database
+      const { data, error } = await supabase
+        .from('statements')
+        .insert({
+          user_id: user.id,
+          filename: file.name,
+          file_path: uploadData.path,
+          file_type: type
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setStatements(prev => [data, ...prev])
+
+      // TODO: Process PDF and extract transactions
+      // This would typically be done by a background job or edge function
+      
+    } catch (error) {
+      console.error('Error uploading statement:', error)
+      throw error
+    }
+  }
+
+  const deleteStatement = async (id: string) => {
+    if (!user) return
+
+    try {
+      const statement = statements.find(s => s.id === id)
+      if (!statement) return
+
+      // Delete file from storage
+      const { error: storageError } = await supabase.storage
+        .from('statements')
+        .remove([statement.file_path])
+
+      if (storageError) console.error('Error deleting file:', storageError)
+
+      // Delete record from database
+      const { error } = await supabase
+        .from('statements')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      setStatements(prev => prev.filter(s => s.id !== id))
+    } catch (error) {
+      console.error('Error deleting statement:', error)
+      throw error
+    }
   }
 
   const value = {
     transactions,
     budgets,
+    statements,
     addTransaction,
     deleteTransaction,
     updateBudget,
-    categories: defaultCategories
+    uploadStatement,
+    deleteStatement,
+    categories: defaultCategories,
+    loading,
+    refreshData
   }
 
   return (

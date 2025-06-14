@@ -31,9 +31,9 @@ export function Register() {
     setLoading(true)
 
     try {
-      const success = await register(name, email, password)
-      if (!success) {
-        setError('Registration failed. Please try again.')
+      const result = await register(name, email, password)
+      if (!result.success) {
+        setError(result.error || 'Registration failed')
       }
     } catch (err) {
       setError('An error occurred. Please try again.')

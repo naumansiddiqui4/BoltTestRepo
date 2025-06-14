@@ -21,12 +21,16 @@ export function Layout({ children }: LayoutProps) {
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Expenses', href: '/expenses', icon: CreditCard },
+    { name: 'Transactions', href: '/expenses', icon: CreditCard },
     { name: 'Budget', href: '/budget', icon: PieChart },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   ]
 
   const isActive = (href: string) => location.pathname === href
+
+  const handleLogout = async () => {
+    await logout()
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -79,12 +83,14 @@ export function Layout({ children }: LayoutProps) {
                   <User className="h-4 w-4 text-gray-600" />
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-gray-700">{user?.name}</p>
+                  <p className="text-sm font-medium text-gray-700">
+                    {user?.user_metadata?.name || user?.email?.split('@')[0]}
+                  </p>
                   <p className="text-xs text-gray-500">{user?.email}</p>
                 </div>
               </div>
               <button
-                onClick={logout}
+                onClick={handleLogout}
                 className="ml-3 p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200"
                 title="Sign out"
               >
@@ -108,7 +114,7 @@ export function Layout({ children }: LayoutProps) {
               </span>
             </div>
             <button
-              onClick={logout}
+              onClick={handleLogout}
               className="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200"
             >
               <LogOut className="h-5 w-5" />

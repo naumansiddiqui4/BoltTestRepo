@@ -1,16 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-
-interface User {
-  id: string
-  email: string
-  name: string
-}
+import { supabase } from '../lib/supabase'
+import type { User, Session } from '@supabase/supabase-js'
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<boolean>
-  register: (name: string, email: string, password: string) => Promise<boolean>
-  logout: () => void
+  session: Session | null
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  logout: () => Promise<void>
   loading: boolean
 }
 
@@ -26,54 +23,90 @@ export function useAuth() {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check for stored user session
-    const storedUser = localStorage.getItem('user')
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
-    }
-    setLoading(false)
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setSession(session)
+      setUser(session?.user ?? null)
+      setLoading(false)
+
+      // Create profile if user signs up
+      if (event === 'SIGNED_UP' && session?.user) {
+        const { error } = await supabase
+          .from('profiles')
+          .insert({
+            id: session.user.id,
+            email: session.user.email!,
+            name: session.user.user_metadata?.name || session.user.email!.split('@')[0]
+          })
+        
+        if (error) {
+          console.error('Error creating profile:', error)
+        }
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    // Mock authentication - in real app, this would call your API
-    if (email && password) {
-      const mockUser = {
-        id: '1',
+  const login = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        name: email.split('@')[0]
+        password,
+      })
+
+      if (error) {
+        return { success: false, error: error.message }
       }
-      setUser(mockUser)
-      localStorage.setItem('user', JSON.stringify(mockUser))
-      return true
+
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: 'An unexpected error occurred' }
     }
-    return false
   }
 
-  const register = async (name: string, email: string, password: string): Promise<boolean> => {
-    // Mock registration - in real app, this would call your API
-    if (name && email && password) {
-      const mockUser = {
-        id: Date.now().toString(),
+  const register = async (name: string, email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
         email,
-        name
+        password,
+        options: {
+          data: {
+            name,
+          },
+        },
+      })
+
+      if (error) {
+        return { success: false, error: error.message }
       }
-      setUser(mockUser)
-      localStorage.setItem('user', JSON.stringify(mockUser))
-      return true
+
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: 'An unexpected error occurred' }
     }
-    return false
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('user')
+  const logout = async () => {
+    await supabase.auth.signOut()
   }
 
   const value = {
     user,
+    session,
     login,
     register,
     logout,

@@ -14,7 +14,10 @@
     "react-router-dom": "^6.26.1",
     "lucide-react": "^0.445.0",
     "recharts": "^2.12.7",
-    "date-fns": "^3.6.0"
+    "date-fns": "^3.6.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "pdf-parse": "^1.1.1",
+    "react-dropzone": "^14.2.3"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",

@@ -17,9 +17,9 @@ export function Login() {
     setLoading(true)
 
     try {
-      const success = await login(email, password)
-      if (!success) {
-        setError('Invalid email or password')
+      const result = await login(email, password)
+      if (!result.success) {
+        setError(result.error || 'Login failed')
       }
     } catch (err) {
       setError('An error occurred. Please try again.')
@@ -122,14 +122,6 @@ export function Login() {
               </p>
             </div>
           </form>
-
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="text-xs text-gray-500 text-center">
-              <p className="mb-2">Demo credentials:</p>
-              <p>Email: demo@example.com</p>
-              <p>Password: any password</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>

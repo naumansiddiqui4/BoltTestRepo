@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
 import { useFinance } from '../../contexts/FinanceContext'
-import { Plus, Trash2, Filter } from 'lucide-react'
+import { StatementUpload } from '../statements/StatementUpload'
+import { Plus, Trash2, Filter, Upload } from 'lucide-react'
 import { format } from 'date-fns'
 
 export function Expenses() {
-  const { transactions, addTransaction, deleteTransaction, categories } = useFinance()
+  const { transactions, addTransaction, deleteTransaction, categories, loading } = useFinance()
   const [showAddForm, setShowAddForm] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
   const [filterCategory, setFilterCategory] = useState('all')
   const [filterType, setFilterType] = useState('all')
 
@@ -17,24 +19,38 @@ export function Expenses() {
     type: 'expense' as 'income' | 'expense'
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (formData.amount && formData.description) {
-      addTransaction({
-        amount: parseFloat(formData.amount),
-        description: formData.description,
-        category: formData.category,
-        date: formData.date,
-        type: formData.type
-      })
-      setFormData({
-        amount: '',
-        description: '',
-        category: categories[0],
-        date: new Date().toISOString().split('T')[0],
-        type: 'expense'
-      })
-      setShowAddForm(false)
+      try {
+        await addTransaction({
+          amount: parseFloat(formData.amount),
+          description: formData.description,
+          category: formData.category,
+          date: formData.date,
+          type: formData.type
+        })
+        setFormData({
+          amount: '',
+          description: '',
+          category: categories[0],
+          date: new Date().toISOString().split('T')[0],
+          type: 'expense'
+        })
+        setShowAddForm(false)
+      } catch (error) {
+        console.error('Error adding transaction:', error)
+      }
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Are you sure you want to delete this transaction?')) {
+      try {
+        await deleteTransaction(id)
+      } catch (error) {
+        console.error('Error deleting transaction:', error)
+      }
     }
   }
 
@@ -48,6 +64,28 @@ export function Expenses() {
     return t.type === 'income' ? sum + t.amount : sum - t.amount
   }, 0)
 
+  if (showUpload) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Upload Statements</h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Upload bank and credit card statements for automatic transaction extraction
+            </p>
+          </div>
+          <button
+            onClick={() => setShowUpload(false)}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+          >
+            Back to Transactions
+          </button>
+        </div>
+        <StatementUpload />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -57,13 +95,22 @@ export function Expenses() {
             Track your income and expenses
           </p>
         </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Transaction
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={() => setShowUpload(true)}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Statements
+          </button>
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Transaction
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -199,7 +246,12 @@ export function Expenses() {
       {/* Transactions List */}
       <div className="bg-white shadow-sm rounded-lg">
         <div className="px-4 py-5 sm:p-6">
-          {filteredTransactions.length > 0 ? (
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+              <p className="text-gray-600 mt-2">Loading transactions...</p>
+            </div>
+          ) : filteredTransactions.length > 0 ? (
             <div className="flow-root">
               <ul className="-my-5 divide-y divide-gray-200">
                 {filteredTransactions.map((transaction) => (
@@ -233,7 +285,7 @@ export function Expenses() {
                           {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toFixed(2)}
                         </span>
                         <button
-                          onClick={() => deleteTransaction(transaction.id)}
+                          onClick={() => handleDelete(transaction.id)}
                           className="text-red-400 hover:text-red-600 transition-colors duration-200"
                         >
                           <Trash2 className="h-4 w-4" />
