@@ -1,83 +1,47 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { FinanceProvider } from './contexts/FinanceContext'
-import { Login } from './components/auth/Login'
-import { Register } from './components/auth/Register'
-import { Dashboard } from './components/dashboard/Dashboard'
-import { Expenses } from './components/expenses/Expenses'
-import { Budget } from './components/budget/Budget'
-import { Analytics } from './components/analytics/Analytics'
-import { Layout } from './components/layout/Layout'
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { AppProvider, useApp } from './contexts/AppContext';
+import Header from './components/Layout/Header';
+import Sidebar from './components/Layout/Sidebar';
+import Dashboard from './components/Dashboard/Dashboard';
+import VideoMode from './components/VideoMode/VideoMode';
+import ProfileSetup from './components/UserProfile/ProfileSetup';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
-  return user ? <>{children}</> : <Navigate to="/login" />
-}
+function AppContent() {
+  const { state } = useApp();
 
-function PublicRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
-  return !user ? <>{children}</> : <Navigate to="/dashboard" />
+  if (!state.currentUser) {
+    return <ProfileSetup />;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/video" element={<VideoMode />} />
+            <Route path="/pdf" element={<div className="p-6"><h1>PDF Mode - Coming Soon</h1></div>} />
+            <Route path="/web" element={<div className="p-6"><h1>Web Mode - Coming Soon</h1></div>} />
+            <Route path="/analytics" element={<div className="p-6"><h1>Analytics - Coming Soon</h1></div>} />
+            <Route path="/history" element={<div className="p-6"><h1>History - Coming Soon</h1></div>} />
+          </Routes>
+        </main>
+      </div>
+    </div>
+  );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <FinanceProvider>
-        <Router>
-          <div className="min-h-screen bg-gray-50">
-            <Routes>
-              <Route path="/login" element={
-                <PublicRoute>
-                  <Login />
-                </PublicRoute>
-              } />
-              <Route path="/register" element={
-                <PublicRoute>
-                  <Register />
-                </PublicRoute>
-              } />
-              <Route path="/" element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Dashboard />
-                  </Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/dashboard" element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Dashboard />
-                  </Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/expenses" element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Expenses />
-                  </Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/budget" element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Budget />
-                  </Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/analytics" element={
-                <ProtectedRoute>
-                  <Layout>
-                    <Analytics />
-                  </Layout>
-                </ProtectedRoute>
-              } />
-            </Routes>
-          </div>
-        </Router>
-      </FinanceProvider>
-    </AuthProvider>
-  )
+    <AppProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AppProvider>
+  );
 }
 
-export default App
+export default App;
